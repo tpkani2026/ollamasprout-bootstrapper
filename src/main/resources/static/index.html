@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>AI Core Workspace Generator Tool</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f4f6f9; margin: 0; padding: 30px; }
+        .container { max-width: 900px; background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); margin: auto; }
+        h2 { color: #2c3e50; border-bottom: 2px solid #ecf0f1; padding-bottom: 10px; }
+        label { font-weight: 600; display: block; margin: 15px 0 5px; color: #34495e; }
+        input[type="text"] { width: 100%; padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-size: 14px; margin-bottom: 15px; }
+        textarea { width: 100%; height: 250px; padding: 12px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; font-family: monospace; font-size: 14px; display: block; margin-bottom: 15px; }
+        button { background: #3498db; color: white; padding: 12px 25px; border: none; border-radius: 6px; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.2s; display: block; width: 100%; }
+        button:hover { background: #2980b9; }
+        button:disabled { background: #95a5a6; cursor: not-allowed; }
+        /* Added max-height and scrolling settings for handling long terminal outputs */
+        #logConsole { margin-top: 20px; padding: 15px; background: #1e1e1e; color: #00ff00; border-radius: 6px; font-family: 'Courier New', Courier, monospace; min-height: 80px; max-height: 350px; overflow-y: auto; white-space: pre-wrap; box-sizing: border-box; line-height: 1.5; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h2>🤖 AI Workspace Generator Tool Dashboard</h2>
+    
+    <label for="workspacePath">Target Eclipse Workspace Absolute Storage Path:</label>
+    <input type="text" id="workspacePath" placeholder="Provide target path, e.g., C:/Kani/eclipse-workspace/banking-core-settlement-engine">
+
+    <label for="script">Enter Your Functional Blueprint/Requirements Script:</label>
+    <textarea id="script" placeholder="Paste your core banking requirement details here..."></textarea>
+
+    <button id="execBtn" onclick="generateProject()">🚀 Execute Blueprint Code Generation</button>
+
+    <label style="margin-top: 25px;">Execution Output Telemetry:</label>
+    <div id="logConsole">System idling... Awaiting configuration inputs.</div>
+</div>
+
+<script>
+    async function generateProject() {
+        const consoleLog = document.getElementById("logConsole");
+        const execBtn = document.getElementById("execBtn");
+        const path = document.getElementById("workspacePath").value;
+        const scriptText = document.getElementById("script").value;
+
+        if(!path.trim()) {
+            consoleLog.innerText = "⚠️ Validation Error: Please type a valid target storage path directory link.";
+            return;
+        }
+        if(!scriptText.trim()) {
+            consoleLog.innerText = "⚠️ Validation Error: Please paste your functional blueprint requirements script into the textarea block.";
+            return;
+        }
+
+        execBtn.disabled = true;
+        consoleLog.innerHTML = `<span style="color: #ffa502;">⏳ Initializing asynchronous compilation pipeline... Connecting to backend...</span>`;
+        
+        try {
+            const response = await fetch('http://localhost:8081/api/tool/compile-workspace', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ script: scriptText, workspacePath: path })
+            });
+
+            if (!response.ok) {
+                const errData = await response.json();
+                throw new Error(errData.message || "Server rejected request configuration.");
+            }
+
+            const initialResult = await response.json();
+            const jobId = initialResult.jobId;
+
+            const pollInterval = setInterval(async () => {
+                try {
+                    const statusRes = await fetch(`http://localhost:8081/api/tool/status/${jobId}`);
+                    if (!statusRes.ok) return;
+
+                    const statusData = await statusRes.json();
+                    
+                    const colorizedLogs = statusData.logs.map(line => {
+                        if (line.includes("❌")) return `<span style="color: #ff4757; font-weight: bold;">${line}</span>`;
+                        if (line.includes("⚠️") || line.includes("⏳")) return `<span style="color: #ffa502;">${line}</span>`;
+                        if (line.includes("📁")) return `<span style="color: #2ed573;">${line}</span>`;
+                        if (line.includes("🚀") || line.includes("🎉") || line.includes("✅")) return `<span style="color: #1e90ff; font-weight: bold;">${line}</span>`;
+                        return `<span>${line}</span>`;
+                    });
+
+                    consoleLog.innerHTML = colorizedLogs.join('\n');
+                    
+                    // Auto-scroll anchor logic to track updates at the bottom
+                    consoleLog.scrollTop = consoleLog.scrollHeight;
+
+                    if (statusData.status === 'COMPLETED' || statusData.status === 'FAILED') {
+                        clearInterval(pollInterval);
+                        execBtn.disabled = false;
+
+                        setTimeout(() => {
+                            fetch(`http://localhost:8081/api/tool/status/clear/${jobId}`, { method: 'DELETE' })
+                                .catch(err => console.error("Failed to clear background telemetry cache:", err));
+                        }, 5000);
+                    }
+                } catch (pollErr) {
+                    console.error("Error fetching background worker updates: ", pollErr);
+                }
+            }, 1000);
+
+        } catch (err) {
+            consoleLog.innerHTML = `<span style="color: #ff4757;">❌ Connection Failure linking to backend service: ${err.message}</span>`;
+            execBtn.disabled = false;
+        }
+    }
+</script>
+</body>
+</html>
